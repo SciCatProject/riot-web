@@ -16,11 +16,14 @@ RUN apt-get update && apt-get install -y git dos2unix
 WORKDIR /src
 
 COPY . /src
-RUN dos2unix /src/scripts/docker-link-repos.sh && bash /src/scripts/docker-link-repos.sh
+
+# RUN dos2unix /src/scripts/docker-link-repos.sh && bash /src/scripts/docker-link-repos.sh
 RUN yarn --network-timeout=200000 install
 
-RUN dos2unix /src/scripts/docker-package.sh && bash /src/scripts/docker-package.sh
+# RUN dos2unix /src/scripts/docker-package.sh && bash /src/scripts/docker-package.sh
 
+# Create the destination directory
+RUN mkdir -p /src/webapp
 
 # Copy the config now so that we don't create another layer in the app image
 RUN cp /src/config.json /src/webapp/config.json
@@ -29,8 +32,6 @@ RUN cp /src/config.json /src/webapp/config.json
 FROM nginx:alpine-slim
 
 COPY --from=builder /src/webapp /app
-
-
 
 # Insert wasm type into Nginx mime.types file so they load correctly.
 RUN sed -i '3i\ \ \ \ application/wasm wasm\;' /etc/nginx/mime.types
