@@ -16,39 +16,49 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { UpdateCheckStatus } from "matrix-react-sdk/src/BasePlatform";
-import request from 'browser-request';
-import dis from 'matrix-react-sdk/src/dispatcher/dispatcher';
-import { _t } from 'matrix-react-sdk/src/languageHandler';
+import { UpdateCheckStatus, UpdateStatus } from "matrix-react-sdk/src/BasePlatform";
+import dis from "matrix-react-sdk/src/dispatcher/dispatcher";
+import { _t } from "matrix-react-sdk/src/languageHandler";
 import { hideToast as hideUpdateToast, showToast as showUpdateToast } from "matrix-react-sdk/src/toasts/UpdateToast";
 import { Action } from "matrix-react-sdk/src/dispatcher/actions";
-import { CheckUpdatesPayload } from 'matrix-react-sdk/src/dispatcher/payloads/CheckUpdatesPayload';
-import UAParser from 'ua-parser-js';
+import { CheckUpdatesPayload } from "matrix-react-sdk/src/dispatcher/payloads/CheckUpdatesPayload";
+import UAParser from "ua-parser-js";
 import { logger } from "matrix-js-sdk/src/logger";
 
-import VectorBasePlatform from './VectorBasePlatform';
+import VectorBasePlatform from "./VectorBasePlatform";
 import { parseQs } from "../url_utils";
 
 const POKE_RATE_MS = 10 * 60 * 1000; // 10 min
 
+function getNormalizedAppVersion(version: string): string {
+    // if version looks like semver with leading v, strip it (matches scripts/normalize-version.sh)
+    const semVerRegex = /^v\d+.\d+.\d+(-.+)?$/;
+    if (semVerRegex.test(version)) {
+        return version.substring(1);
+    }
+    return version;
+}
+
 export default class WebPlatform extends VectorBasePlatform {
-    constructor() {
+    private static readonly VERSION = process.env.VERSION!; // baked in by Webpack
+
+    public constructor() {
         super();
         // Register service worker if available on this platform
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("sw.js");
         }
     }
 
-    getHumanReadableName(): string {
-        return 'Web Platform'; // no translation required: only used for analytics
+    public getHumanReadableName(): string {
+        return "Web Platform"; // no translation required: only used for analytics
     }
 
     /**
      * Returns true if the platform supports displaying
      * notifications, otherwise false.
      */
-    supportsNotifications(): boolean {
+    public supportsNotifications(): boolean {
         return Boolean(window.Notification);
     }
 
@@ -56,8 +66,8 @@ export default class WebPlatform extends VectorBasePlatform {
      * Returns true if the application currently has permission
      * to display notifications. Otherwise false.
      */
-    maySendNotifications(): boolean {
-        return window.Notification.permission === 'granted';
+    public maySendNotifications(): boolean {
+        return window.Notification.permission === "granted";
     }
 
     /**
@@ -67,58 +77,36 @@ export default class WebPlatform extends VectorBasePlatform {
      * that is 'granted' if the user allowed the request or
      * 'denied' otherwise.
      */
-    requestNotificationPermission(): Promise<string> {
+    public requestNotificationPermission(): Promise<string> {
         // annoyingly, the latest spec says this returns a
         // promise, but this is only supported in Chrome 46
         // and Firefox 47, so adapt the callback API.
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve) {
             window.Notification.requestPermission((result) => {
                 resolve(result);
             });
         });
     }
 
-    private getMostRecentVersion(): Promise<string> {
-        // We add a cachebuster to the request to make sure that we know about
-        // the most recent version on the origin server. That might not
-        // actually be the version we'd get on a reload (particularly in the
-        // presence of intermediate caching proxies), but still: we're trying
-        // to tell the user that there is a new version.
-
-        return new Promise((resolve, reject) => {
-            request(
-                {
-                    method: "GET",
-                    url: "version",
-                    qs: { cachebuster: Date.now() },
-                },
-                (err, response, body) => {
-                    if (err || response.status < 200 || response.status >= 300) {
-                        if (err === null) err = { status: response.status };
-                        reject(err);
-                        return;
-                    }
-
-                    resolve(this.getNormalizedAppVersion(body.trim()));
-                },
-            );
+    private async getMostRecentVersion(): Promise<string> {
+        const res = await fetch("version", {
+            method: "GET",
+            cache: "no-cache",
         });
-    }
 
-    getNormalizedAppVersion(version: string): string {
-        // if version looks like semver with leading v, strip it (matches scripts/normalize-version.sh)
-        const semVerRegex = /^v\d+.\d+.\d+(-.+)?$/;
-        if (semVerRegex.test(version)) {
-            return version.substring(1);
+        if (res.ok) {
+            const text = await res.text();
+            return getNormalizedAppVersion(text.trim());
         }
-        return version;
+
+        return Promise.reject({ status: res.status });
     }
 
-    getAppVersion(): Promise<string> {
-        return Promise.resolve(this.getNormalizedAppVersion(process.env.VERSION));
+    public getAppVersion(): Promise<string> {
+        return Promise.resolve(getNormalizedAppVersion(WebPlatform.VERSION));
     }
 
-    startUpdater() {
+    public startUpdater(): void {
         // Poll for an update immediately, and reload the page now if we're out of date
         // already as we've just initialised an old version of the app somehow.
         //
@@ -127,7 +115,7 @@ export default class WebPlatform extends VectorBasePlatform {
         //
         // Ideally, loading an old copy would be impossible with the
         // cache-control: nocache HTTP header set, but Firefox doesn't always obey it :/
-        console.log("startUpdater, current version is " + this.getNormalizedAppVersion(process.env.VERSION));
+        console.log("startUpdater, current version is " + getNormalizedAppVersion(WebPlatform.VERSION));
         this.pollForUpdate((version: string, newVersion: string) => {
             const query = parseQs(location);
             if (query.updated) {
@@ -147,41 +135,45 @@ export default class WebPlatform extends VectorBasePlatform {
         setInterval(() => this.pollForUpdate(showUpdateToast, hideUpdateToast), POKE_RATE_MS);
     }
 
-    async canSelfUpdate(): Promise<boolean> {
+    public async canSelfUpdate(): Promise<boolean> {
         return true;
     }
 
-    pollForUpdate = (
+    // Exported for tests
+    public pollForUpdate = (
         showUpdate: (currentVersion: string, mostRecentVersion: string) => void,
         showNoUpdate?: () => void,
-    ) => {
-        return this.getMostRecentVersion().then((mostRecentVersion) => {
-            const currentVersion = this.getNormalizedAppVersion(process.env.VERSION);
+    ): Promise<UpdateStatus> => {
+        return this.getMostRecentVersion().then(
+            (mostRecentVersion) => {
+                const currentVersion = getNormalizedAppVersion(WebPlatform.VERSION);
 
-            if (currentVersion !== mostRecentVersion) {
-                if (this.shouldShowUpdate(mostRecentVersion)) {
-                    console.log("Update available to " + mostRecentVersion + ", will notify user");
-                    showUpdate(currentVersion, mostRecentVersion);
+                if (currentVersion !== mostRecentVersion) {
+                    if (this.shouldShowUpdate(mostRecentVersion)) {
+                        console.log("Update available to " + mostRecentVersion + ", will notify user");
+                        showUpdate(currentVersion, mostRecentVersion);
+                    } else {
+                        console.log("Update available to " + mostRecentVersion + " but won't be shown");
+                    }
+                    return { status: UpdateCheckStatus.Ready };
                 } else {
-                    console.log("Update available to " + mostRecentVersion + " but won't be shown");
+                    console.log("No update available, already on " + mostRecentVersion);
+                    showNoUpdate?.();
                 }
-                return { status: UpdateCheckStatus.Ready };
-            } else {
-                console.log("No update available, already on " + mostRecentVersion);
-                showNoUpdate?.();
-            }
 
-            return { status: UpdateCheckStatus.NotAvailable };
-        }, (err) => {
-            logger.error("Failed to poll for update", err);
-            return {
-                status: UpdateCheckStatus.Error,
-                detail: err.message || err.status ? err.status.toString() : 'Unknown Error',
-            };
-        });
+                return { status: UpdateCheckStatus.NotAvailable };
+            },
+            (err) => {
+                logger.error("Failed to poll for update", err);
+                return {
+                    status: UpdateCheckStatus.Error,
+                    detail: err.message || err.status ? err.status.toString() : "Unknown Error",
+                };
+            },
+        );
     };
 
-    startUpdateCheck() {
+    public startUpdateCheck(): void {
         super.startUpdateCheck();
         this.pollForUpdate(showUpdateToast, hideUpdateToast).then((updateState) => {
             dis.dispatch<CheckUpdatesPayload>({
@@ -191,11 +183,11 @@ export default class WebPlatform extends VectorBasePlatform {
         });
     }
 
-    installUpdate() {
+    public installUpdate(): void {
         window.location.reload();
     }
 
-    getDefaultDeviceDisplayName(): string {
+    public getDefaultDeviceDisplayName(): string {
         // strip query-string and fragment from uri
         const url = new URL(window.location.href);
 
@@ -210,22 +202,14 @@ export default class WebPlatform extends VectorBasePlatform {
         let osName = ua.getOS().name || "unknown OS";
         // Stylise the value from the parser to match Apple's current branding.
         if (osName === "Mac OS") osName = "macOS";
-        return _t('%(appName)s (%(browserName)s, %(osName)s)', {
+        return _t("%(appName)s: %(browserName)s on %(osName)s", {
             appName,
             browserName,
             osName,
         });
     }
 
-    screenCaptureErrorString(): string | null {
-        // it won't work at all if you're not on HTTPS so whine whine whine
-        if (window.location.protocol !== "https:") {
-            return _t("You need to be using HTTPS to place a screen-sharing call.");
-        }
-        return null;
-    }
-
-    reload() {
+    public reload(): void {
         window.location.reload();
     }
 }
