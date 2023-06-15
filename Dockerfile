@@ -1,10 +1,10 @@
 # Builder
-FROM --platform=$BUILDPLATFORM node:20-bullseye as builder
+FROM --platform=$BUILDPLATFORM node:20.2.0-bullseye as builder
 
 # Support custom branches of the react-sdk and js-sdk. This also helps us build
 # images of element-web develop.
-ARG USE_CUSTOM_SDKS=true
-ARG REACT_SDK_REPO="https://github.com/SciCatProject/matrix-react-sdk.git"
+ARG USE_CUSTOM_SDKS=false
+ARG REACT_SDK_REPO="https://github.com/matrix-org/matrix-react-sdk.git"
 ARG REACT_SDK_BRANCH="master"
 ARG JS_SDK_REPO="https://github.com/matrix-org/matrix-js-sdk.git"
 ARG JS_SDK_BRANCH="master"
@@ -17,13 +17,11 @@ WORKDIR /src
 
 COPY . /src
 
-# RUN dos2unix /src/scripts/docker-link-repos.sh && bash /src/scripts/docker-link-repos.sh
+RUN dos2unix /src/scripts/docker-link-repos.sh && bash /src/scripts/docker-link-repos.sh
 RUN yarn --network-timeout=200000 install
 
-# RUN dos2unix /src/scripts/docker-package.sh && bash /src/scripts/docker-package.sh
+RUN dos2unix /src/scripts/docker-package.sh && bash /src/scripts/docker-package.sh
 
-# Create the destination directory
-RUN mkdir -p /src/webapp
 
 # Copy the config now so that we don't create another layer in the app image
 RUN cp /src/config.json /src/webapp/config.json
@@ -33,8 +31,6 @@ FROM nginx:alpine-slim
 
 COPY --from=builder /src/webapp /app
 
-# Insert wasm type into Nginx mime.types file so they load correctly.
-# RUN sed -i '3i\ \ \ \ application/wasm wasm\;' /etc/nginx/mime.types
 
 # Override default nginx config
 COPY /nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
