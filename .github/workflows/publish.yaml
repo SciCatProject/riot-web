@@ -32,7 +32,7 @@ jobs:
               id: meta
               uses: docker/metadata-action@v4
               with:
-                  images: ghcr.io/scicatproject/scichat-ui
+                  images: ghcr.io/scicatproject/riot-web
                   flavor: latest=true # adds :latest tag to outputs.tags
                   tags: type=sha,format=long,prefix= # adds :<sha> tag to outputs.tags
 
