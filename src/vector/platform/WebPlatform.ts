@@ -1,7 +1,7 @@
 /*
 Copyright 2016 Aviral Dasgupta
 Copyright 2016 OpenMarket Ltd
-Copyright 2017-2020 New Vector Ltd
+Copyright 2017-2020, 2024 New Vector Ltd
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ limitations under the License.
 
 import { UpdateCheckStatus, UpdateStatus } from "matrix-react-sdk/src/BasePlatform";
 import dis from "matrix-react-sdk/src/dispatcher/dispatcher";
-import { _t } from "matrix-react-sdk/src/languageHandler";
 import { hideToast as hideUpdateToast, showToast as showUpdateToast } from "matrix-react-sdk/src/toasts/UpdateToast";
 import { Action } from "matrix-react-sdk/src/dispatcher/actions";
 import { CheckUpdatesPayload } from "matrix-react-sdk/src/dispatcher/payloads/CheckUpdatesPayload";
@@ -27,6 +26,7 @@ import { logger } from "matrix-js-sdk/src/logger";
 
 import VectorBasePlatform from "./VectorBasePlatform";
 import { parseQs } from "../url_utils";
+import { _t } from "../../languageHandler";
 
 const POKE_RATE_MS = 10 * 60 * 1000; // 10 min
 
@@ -44,9 +44,41 @@ export default class WebPlatform extends VectorBasePlatform {
 
     public constructor() {
         super();
-        // Register service worker if available on this platform
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("sw.js");
+
+        // Register the service worker in the background
+        this.tryRegisterServiceWorker().catch((e) => console.error("Error registering/updating service worker:", e));
+    }
+
+    private async tryRegisterServiceWorker(): Promise<void> {
+        if (!("serviceWorker" in navigator)) {
+            return; // not available on this platform - don't try to register the service worker
+        }
+
+        // sw.js is exported by webpack, sourced from `/src/serviceworker/index.ts`
+        const registration = await navigator.serviceWorker.register("sw.js");
+        if (!registration) {
+            // Registration didn't work for some reason - assume failed and ignore.
+            // This typically happens in Jest.
+            return;
+        }
+
+        await registration.update();
+        navigator.serviceWorker.addEventListener("message", this.onServiceWorkerPostMessage.bind(this));
+    }
+
+    private onServiceWorkerPostMessage(event: MessageEvent): void {
+        try {
+            if (event.data?.["type"] === "userinfo" && event.data?.["responseKey"]) {
+                const userId = localStorage.getItem("mx_user_id");
+                const deviceId = localStorage.getItem("mx_device_id");
+                event.source!.postMessage({
+                    responseKey: event.data["responseKey"],
+                    userId,
+                    deviceId,
+                });
+            }
+        } catch (e) {
+            console.error("Error responding to service worker: ", e);
         }
     }
 
@@ -167,7 +199,7 @@ export default class WebPlatform extends VectorBasePlatform {
                 logger.error("Failed to poll for update", err);
                 return {
                     status: UpdateCheckStatus.Error,
-                    detail: err.message || err.status ? err.status.toString() : "Unknown Error",
+                    detail: err.message || (err.status ? err.status.toString() : "Unknown Error"),
                 };
             },
         );
@@ -202,7 +234,7 @@ export default class WebPlatform extends VectorBasePlatform {
         let osName = ua.getOS().name || "unknown OS";
         // Stylise the value from the parser to match Apple's current branding.
         if (osName === "Mac OS") osName = "macOS";
-        return _t("%(appName)s: %(browserName)s on %(osName)s", {
+        return _t("web_default_device_name", {
             appName,
             browserName,
             osName,
