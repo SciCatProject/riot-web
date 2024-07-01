@@ -1,5 +1,5 @@
 # Builder
-FROM --platform=$BUILDPLATFORM node:20.2.0-bullseye as builder
+FROM --platform=$BUILDPLATFORM node:22-bullseye as builder
 
 # Support custom branches of the react-sdk and js-sdk. This also helps us build
 # images of element-web develop.
