@@ -129,7 +129,7 @@ Note that `yarn dist` is not supported on Windows, so Windows users can run `yar
 which will build all the necessary files into the `webapp` directory. The version of Element
 will not appear in Settings without using the dist script. You can then mount the
 `webapp` directory on your web server to actually serve up the app, which is
-entirely static content
+entirely static content.
 
 # Running as a Desktop app
 
