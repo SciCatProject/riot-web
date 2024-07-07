@@ -5,7 +5,7 @@ FROM --platform=$BUILDPLATFORM node:22-bullseye as builder
 # images of element-web develop.
 ARG USE_CUSTOM_SDKS=false
 ARG REACT_SDK_REPO="https://github.com/matrix-org/matrix-react-sdk.git"
-ARG REACT_SDK_BRANCH="master"
+ARG REACT_SDK_BRANCH="develop"
 ARG JS_SDK_REPO="https://github.com/matrix-org/matrix-js-sdk.git"
 ARG JS_SDK_BRANCH="master"
 
