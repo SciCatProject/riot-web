@@ -33,7 +33,7 @@ Element has several tiers of support for different environments:
 
 For accessing Element on an Android or iOS device, we currently recommend the
 native apps [element-android](https://github.com/element-hq/element-android)
-and [element-ios](https://github.com/element-hq/element-ios)
+and [element-ios](https://github.com/element-hq/element-ios).
 
 # Getting Started
 
